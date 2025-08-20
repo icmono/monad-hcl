@@ -7,7 +7,7 @@ export default function Home() {
         <h1>Monad Hardware Compatibility List</h1>
         <p>Community-maintained hardware guide for running Monad validators with optimal performance</p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1.5rem' }}>
-          <span className="badge badge-purple">Last Updated: January 2025</span>
+          <span className="badge badge-purple">Last Updated: 2025/08/21</span>
           <span className="badge badge-info">Testnet Phase</span>
           <span className="badge badge-success">Community Driven</span>
         </div>
@@ -676,88 +676,319 @@ sudo cpupower idle-set -e 1`}</code></pre>
         </div>
 
         <div className="card">
-          <h3>2. PPS Calculation by Message Type</h3>
+          <h3>2. RaptorCast Packet Analysis (200 Validators)</h3>
           
           <div className="info-box">
-            <table style={{marginTop: '1rem', marginBottom: '1rem'}}>
+            <h4>Basic Assumptions</h4>
+            <ul>
+              <li><strong>Validators:</strong> 200 nodes with equal stake (voting power)</li>
+              <li><strong>Proposal size:</strong> 2MB (maximum block size)</li>
+              <li><strong>Redundancy:</strong> 3x</li>
+              <li><strong>MTU:</strong> 1,452 bytes (actual payload: ~1,220 bytes)</li>
+            </ul>
+            
+            <h4 style={{marginTop: '1.25rem'}}>Packet Calculation</h4>
+            
+            <div style={{marginBottom: '1rem'}}>
+              <p><strong>1. Leader sends proposal:</strong></p>
+              <ul style={{marginLeft: '1.5rem'}}>
+                <li>Original chunks: 2MB ÷ 1,220 bytes ≈ 1,721 chunks</li>
+                <li>With redundancy: 1,721 × 3 = 5,163 chunks</li>
+                <li>Per validator allocation: 5,163 ÷ 199 ≈ 26 chunks (average)</li>
+              </ul>
+            </div>
+            
+            <div>
+              <p><strong>2. Rebroadcast load:</strong></p>
+              <ul style={{marginLeft: '1.5rem'}}>
+                <li>Each node receives ~26 chunks as recipient</li>
+                <li>Rebroadcasts each chunk to remaining 198 nodes</li>
+                <li>Rebroadcast packets: 26 × 198 = 5,148 packets</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>3. PPS Analysis by Role</h3>
+          
+          <div className="info-box">
+            <h4>When Leader</h4>
+            <ul>
+              <li><strong>Send:</strong> 5,163 chunks (initial transmission)</li>
+              <li><strong>Receive:</strong> 199 vote packets</li>
+              <li><strong>Total packets:</strong> ~5,362 per round</li>
+            </ul>
+            
+            <h4 style={{marginTop: '1.25rem'}}>When Non-Leader</h4>
+            <ul>
+              <li><strong>Receive:</strong>
+                <ul style={{marginLeft: '1.5rem', marginTop: '0.5rem'}}>
+                  <li>Direct from leader: ~26 chunks</li>
+                  <li>Via rebroadcast: ~1,695 chunks (for recovery)</li>
+                  <li>Vote packets: 199</li>
+                  <li>Total receive: ~1,920 packets</li>
+                </ul>
+              </li>
+              <li><strong>Send:</strong>
+                <ul style={{marginLeft: '1.5rem', marginTop: '0.5rem'}}>
+                  <li>Rebroadcast: ~5,148 packets (26 × 198)</li>
+                  <li>Vote transmission: 199 packets</li>
+                  <li>Total send: ~5,347 packets</li>
+                </ul>
+              </li>
+              <li><strong>Total packets:</strong> ~7,267 per round</li>
+            </ul>
+            
+            <table style={{marginTop: '1.5rem'}}>
               <thead>
                 <tr>
-                  <th>Message Type</th>
-                  <th>Size</th>
-                  <th>Max/sec</th>
-                  <th>Recommended PPS</th>
-                  <th>Notes</th>
+                  <th>Proposal Size</th>
+                  <th>Leader (PPS)</th>
+                  <th>Non-Leader (PPS)</th>
+                  <th>Network Total</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td><strong>Transaction</strong></td>
-                  <td>~400 bytes</td>
-                  <td>12,500 tx/s</td>
-                  <td className="text-mono">25,000 pps</td>
-                  <td>2x margin (5,000 × 2.5 rounds)</td>
+                  <td>100KB</td>
+                  <td className="text-mono">~451</td>
+                  <td className="text-mono">~400-600</td>
+                  <td>~300KB</td>
                 </tr>
                 <tr>
-                  <td><strong>Vote</strong></td>
-                  <td>~200 bytes</td>
-                  <td>N × 5</td>
-                  <td className="text-mono">N × 10 pps</td>
-                  <td>N = validators (2.5 rounds/s)</td>
-                </tr>
-                <tr>
-                  <td><strong>Proposal</strong></td>
-                  <td>2MB max</td>
-                  <td>2.5/sec</td>
-                  <td className="text-mono">50,000 pps</td>
-                  <td>Burst allowed (2.5 rounds/s)</td>
+                  <td><strong>2MB</strong></td>
+                  <td className="text-mono"><strong>~5,362</strong></td>
+                  <td className="text-mono"><strong>~7,267</strong></td>
+                  <td><strong>~6MB</strong></td>
                 </tr>
               </tbody>
             </table>
             
-            <div className="badge badge-info" style={{marginTop: '1rem'}}>
-              💡 Total PPS = 25,000 + 1,000 + 50,000 + 25,000 (margin) = <strong>101,000 pps</strong>
+            <div className="badge badge-danger" style={{marginTop: '1rem'}}>
+              ⚠️ With 2.5 rounds/sec: Non-leader peak = <strong>~18,665 PPS</strong>
             </div>
             <div className="badge badge-warning" style={{marginTop: '0.5rem'}}>
-              ⚠️ Recommended setting: <strong>125,000 pps</strong> (with safety margin)
+              🔥 For consensus only: <strong>20,000 PPS</strong> firewall setting recommended
             </div>
           </div>
         </div>
 
         <div className="card">
-          <h3>3. Port-specific & Packet Size Limits</h3>
+          <h3>4. Critical Issues with 2MB Blocks</h3>
           
           <div className="info-box">
-            <h4>Port-based Limits</h4>
             <ul>
-              <li><strong>P2P Port (TCP/UDP):</strong> 100,000 pps</li>
-              <li><strong>RPC Port (HTTP/WS):</strong> 25,000 pps</li>
-              <li><strong>Management Port:</strong> 1,000 pps</li>
+              <li><strong>High burst load:</strong> 7,000+ packets per round processing</li>
+              <li><strong>Rebroadcast bottleneck:</strong> Each node retransmits 5,000+ packets</li>
+              <li><strong>Network latency:</strong> Queueing delays from massive packet volume</li>
+              <li><strong>Recovery time:</strong> Need to collect minimum 1,721 chunks</li>
             </ul>
             
-            <h4 style={{marginTop: '1.25rem'}}>Burst Limits</h4>
+            <h4 style={{marginTop: '1.25rem'}}>Optimization Considerations</h4>
             <ul>
-              <li><strong>Burst size:</strong> 250,000 packets</li>
-              <li><strong>Burst recovery rate:</strong> 125,000 pps</li>
+              <li><strong>Reduce redundancy:</strong> 2x redundancy = 33% load reduction</li>
+              <li><strong>Increase chunk size:</strong> Adjust MTU for larger payloads</li>
+              <li><strong>Hierarchical propagation:</strong> Implement tiered broadcast structure</li>
+              <li><strong>Selective rebroadcast:</strong> Stake-based forwarding priority</li>
             </ul>
-
-            <h4 style={{marginTop: '1.25rem'}}>Packet Size-based Limits</h4>
+            
+            <h4 style={{marginTop: '1.25rem'}}>Bandwidth Comparison</h4>
             <ul>
-              <li><strong>Small packets (&lt;500B):</strong> 75,000 pps (votes, control messages)</li>
-              <li><strong>Medium packets (500B-1000B):</strong> 37,500 pps (transactions, Raptorcast packets)</li>
-              <li><strong>Large packets (&gt;1000B):</strong> 12,500 pps (aggregated messages)</li>
+              <li><strong>Traditional broadcast:</strong> 2MB × 199 = 398MB (total network)</li>
+              <li><strong>RaptorCast:</strong> 2MB × 3 = 6MB (total network)</li>
+              <li><strong>Savings:</strong> ~98.5% bandwidth reduction</li>
             </ul>
           </div>
         </div>
 
         <div className="card">
-          <h3>4. Monitoring & Alert Thresholds</h3>
+          <h3>5. Comprehensive Network PPS Analysis</h3>
+          
+          <div className="info-box">
+            <h4>1. Consensus Messages (RaptorCast)</h4>
+            <div style={{marginBottom: '1rem'}}>
+              <p><strong>Proposal (2MB block):</strong></p>
+              <ul style={{marginLeft: '1.5rem'}}>
+                <li>Leader: 5,163 chunks sent</li>
+                <li>Non-leader: 26 received + 5,148 rebroadcast</li>
+                <li>Per round: ~7,267 packets</li>
+              </ul>
+            </div>
+            <div>
+              <p><strong>Vote messages:</strong></p>
+              <ul style={{marginLeft: '1.5rem'}}>
+                <li>Send: 199 (to all other nodes)</li>
+                <li>Receive: 199</li>
+                <li>Per round: 398 packets</li>
+              </ul>
+            </div>
+            
+            <h4 style={{marginTop: '1.25rem'}}>2. Transaction Traffic (Point-to-Point)</h4>
+            <ul>
+              <li><strong>Throughput:</strong> 10,000 TPS = 2MB/s</li>
+              <li><strong>Batching:</strong> 256KB batches × 8/second</li>
+              <li><strong>Packet size:</strong> 256KB = ~180 UDP packets</li>
+              <li><strong>Distribution:</strong> Send to 3 future leaders</li>
+              <li><strong>Send:</strong> 8 batches × 180 packets × 3 leaders = 4,320 packets/sec</li>
+              <li><strong>Receive:</strong> Similar volume from other nodes = ~4,320 packets/sec</li>
+              <li><strong>Total:</strong> ~8,640 packets/sec</li>
+            </ul>
+            
+            <h4 style={{marginTop: '1.25rem'}}>3. Block Synchronization</h4>
+            <ul>
+              <li><strong>Missing block requests/responses</strong></li>
+              <li><strong>2MB block:</strong> ~1,400 packets</li>
+              <li><strong>Average sync:</strong> 1-2 blocks/second</li>
+              <li><strong>Per second:</strong> ~2,800 packets</li>
+            </ul>
+            
+            <h4 style={{marginTop: '1.25rem'}}>4. State Synchronization</h4>
+            <ul>
+              <li><strong>Merkle proof included state chunks</strong></li>
+              <li><strong>Variable based on state size</strong></li>
+              <li><strong>Average:</strong> 100KB/second sync</li>
+              <li><strong>Per second:</strong> ~1,000 packets</li>
+            </ul>
+            
+            <h4 style={{marginTop: '1.25rem'}}>5. Peer Discovery & Others</h4>
+            <ul>
+              <li>Peer information exchange</li>
+              <li>Heartbeat/ping messages</li>
+              <li><strong>Per second:</strong> ~200 packets</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>6. Total PPS Requirements</h3>
+          
+          <div className="info-box">
+            <h4>Per Round Breakdown (400ms assumed)</h4>
+            <table style={{marginTop: '1rem'}}>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Leader</th>
+                  <th>Non-Leader</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Proposal Send</td>
+                  <td className="text-mono">5,163</td>
+                  <td className="text-mono">5,148</td>
+                </tr>
+                <tr>
+                  <td>Proposal Receive</td>
+                  <td className="text-mono">199</td>
+                  <td className="text-mono">1,920</td>
+                </tr>
+                <tr>
+                  <td>Vote Send/Receive</td>
+                  <td className="text-mono">398</td>
+                  <td className="text-mono">398</td>
+                </tr>
+                <tr>
+                  <td><strong>Round Total</strong></td>
+                  <td className="text-mono"><strong>5,760</strong></td>
+                  <td className="text-mono"><strong>7,466</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <h4 style={{marginTop: '1.5rem'}}>Per Second Total (2.5 rounds/second)</h4>
+            <table style={{marginTop: '1rem'}}>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Packets/Second</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Consensus (2.5 rounds)</td>
+                  <td className="text-mono">~18,665</td>
+                </tr>
+                <tr>
+                  <td>Transactions (10K TPS, 3 leaders)</td>
+                  <td className="text-mono">~8,640</td>
+                </tr>
+                <tr>
+                  <td>Block Sync</td>
+                  <td className="text-mono">~2,800</td>
+                </tr>
+                <tr>
+                  <td>State Sync</td>
+                  <td className="text-mono">~1,000</td>
+                </tr>
+                <tr>
+                  <td>Peer Discovery</td>
+                  <td className="text-mono">~200</td>
+                </tr>
+                <tr>
+                  <td><strong>TOTAL</strong></td>
+                  <td className="text-mono"><strong>~31,305 PPS</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <h4 style={{marginTop: '1.5rem'}}>Bandwidth Analysis</h4>
+            <table style={{marginTop: '1rem'}}>
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th>Send</th>
+                  <th>Receive</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Consensus</td>
+                  <td className="text-mono">~15MB/s</td>
+                  <td className="text-mono">~15MB/s</td>
+                  <td className="text-mono">~30MB/s</td>
+                </tr>
+                <tr>
+                  <td>Transactions</td>
+                  <td className="text-mono">~4MB/s</td>
+                  <td className="text-mono">~4MB/s</td>
+                  <td className="text-mono">~8MB/s</td>
+                </tr>
+                <tr>
+                  <td>Sync</td>
+                  <td className="text-mono">~2MB/s</td>
+                  <td className="text-mono">~2MB/s</td>
+                  <td className="text-mono">~4MB/s</td>
+                </tr>
+                <tr>
+                  <td><strong>Total Bandwidth</strong></td>
+                  <td className="text-mono"><strong>~21MB/s</strong></td>
+                  <td className="text-mono"><strong>~21MB/s</strong></td>
+                  <td className="text-mono"><strong>~42MB/s</strong></td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <div className="badge badge-danger" style={{marginTop: '1.5rem'}}>
+              🔥 Required Firewall Setting: <strong>50,000 PPS</strong> minimum
+            </div>
+            <div className="badge badge-warning" style={{marginTop: '0.5rem'}}>
+              ⚠️ Recommended with margin: <strong>70,000 PPS</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>7. Monitoring & Alert Thresholds</h3>
           
           <div className="info-box">
             <h4>Key Metrics to Monitor</h4>
             <ul>
               <li>Port-specific PPS utilization</li>
               <li>Number of dropped packets</li>
-              <li>RaptorQ decoding failure rate</li>
+              <li>RaptorCast decoding failure rate</li>
               <li>Memory pool utilization</li>
             </ul>
             
@@ -797,14 +1028,14 @@ netstat -su | grep -i drop`}</code></pre>
         </div>
 
         <div className="card">
-          <h3>5. Important Considerations</h3>
+          <h3>8. Important Considerations</h3>
           
           <div className="info-box">
             <ul>
               <li><strong>Validator count scaling:</strong> Increase Vote PPS proportionally as validators increase</li>
               <li><strong>Network topology:</strong> Full nodes connected to multiple validators need higher PPS</li>
               <li><strong>Geographic distribution:</strong> Adjust burst allowance based on regional latency</li>
-              <li><strong>RaptorQ efficiency:</strong> Actual redundancy may be lower than 7x depending on network conditions</li>
+              <li><strong>RaptorCast efficiency:</strong> Actual redundancy may be lower than 7x depending on network conditions</li>
               <li><strong>DDoS defense:</strong> Additional rules needed for SYN flood and general DDoS attacks</li>
             </ul>
             
